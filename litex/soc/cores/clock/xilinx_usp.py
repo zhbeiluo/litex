@@ -63,7 +63,8 @@ class USPMMCM(XilinxClocking):
 
     def __init__(self, speedgrade=-1):
         self.logger = logging.getLogger("USPMMCM")
-        self.logger.info("Creating USPMMCM, {}.".format(colorer("speedgrade {}".format(speedgrade))))
+        self.logger.info("Creating USPMMCM, {}.".format(
+            colorer("speedgrade {}".format(speedgrade))))
         XilinxClocking.__init__(self)
         self.divclk_divide_range = (1, 106+1)
         self.clkin_freq_range = {
@@ -72,9 +73,9 @@ class USPMMCM(XilinxClocking):
             -3: (10e6, 1066e6),
         }[speedgrade]
         self.vco_freq_range = {
-            -1: (800e6, 1600e6),
-            -2: (800e6, 1600e6),
-            -3: (800e6, 1600e6),
+            -1: (600e6, 1200e6),
+            -2: (600e6, 1440e6),
+            -3: (600e6, 1600e6),
         }[speedgrade]
 
     def do_finalize(self):
@@ -82,29 +83,53 @@ class USPMMCM(XilinxClocking):
         config = self.compute_config()
         mmcm_fb = Signal()
         self.params.update(
-            # Global.
-            p_BANDWIDTH = "OPTIMIZED",
-            i_RST       = self.reset,
-            i_PWRDWN    = self.power_down,
-            o_LOCKED    = self.locked,
+            # Attributes
+            p_BANDWIDTH="OPTIMIZED",
+            p_COMPENSATION="INTERNAL",
+            p_STARTUP_WAIT="FALSE",
+            p_DIVCLK_DIVIDE=config["divclk_divide"],
+            p_CLKFBOUT_MULT_F=config["clkfbout_mult"],
+            p_CLKFBOUT_PHASE=0,
+            p_CLKFBOUT_USE_FINE_PS="FALSE",
+            p_CLKIN1_PERIOD=1e9/self.clkin_freq,
+            p_REF_JITTER1=0.010,
 
-            # VCO.
-            p_REF_JITTER1     = 0.01,
-            p_CLKIN1_PERIOD   = 1e9/self.clkin_freq,
-            p_CLKFBOUT_MULT_F = config["clkfbout_mult"],
-            p_DIVCLK_DIVIDE   = config["divclk_divide"],
-            i_CLKIN1          = self.clkin,
-            i_CLKFBIN         = mmcm_fb,
-            o_CLKFBOUT        = mmcm_fb,
+            # Input Signals
+            i_CLKIN1=self.clkin,
+            i_CLKIN2=0,
+            i_CLKFBIN=mmcm_fb,
+            i_RST=self.reset,
+            i_PWRDWN=self.power_down,
+
+            # other control and status signals
+            i_CDDCREQ=0,
+            i_CLKINSEL=1,
+            i_DADDR=0,
+            i_DCLK=0,
+            i_DEN=0,
+            i_DI=0,
+            i_DWE=0,
+            i_PSCLK=0,
+            i_PSEN=0,
+            i_PSINCDEC=0,
+
+            # output signals
+            o_LOCKED=self.locked,
+            o_CLKFBOUT=mmcm_fb
         )
+
+        # output signals: CLKOUT[0:6]
         for n, (clk, f, p, m) in sorted(self.clkouts.items()):
             if n == 0:
-                self.params["p_CLKOUT{}_DIVIDE_F".format(n)] = config["clkout{}_divide".format(n)]
+                self.params["p_CLKOUT{}_DIVIDE_F".format(
+                    n)] = config["clkout{}_divide".format(n)]
             else:
-                self.params["p_CLKOUT{}_DIVIDE".format(n)] = config["clkout{}_divide".format(n)]
-            self.params["p_CLKOUT{}_PHASE".format(n)] = config["clkout{}_phase".format(n)]
-            self.params["o_CLKOUT{}".format(n)]       = clk
-        self.specials += Instance("MMCME2_ADV", **self.params)
+                self.params["p_CLKOUT{}_DIVIDE".format(
+                    n)] = config["clkout{}_divide".format(n)]
+            self.params["p_CLKOUT{}_PHASE".format(
+                n)] = config["clkout{}_phase".format(n)]
+            self.params["o_CLKOUT{}".format(n)] = clk
+        self.specials += Instance("MMCME4_ADV", **self.params)
 
 
 class USPIDELAYCTRL(Module):
